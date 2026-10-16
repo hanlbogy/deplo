@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>외교관 게임 (Diplomacy Game)</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #34495e;
+            --accent: #e74c3c;
+            --bg: #ecf0f1;
+            --card-bg: #ffffff;
+            --text: #2c3e50;
+            --text-light: #7f8c8d;
+            --success: #2ecc71;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            margin-bottom: 10px;
+        }
+
+        .game-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .game-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            border-bottom: 2px solid var(--bg);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-badge {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: var(--secondary);
+            color: white;
+        }
+
+        /* Map and Country List Styling */
+        .world-map {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .country-node {
+            border: 2px solid #bdc3c7;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .country-node.active {
+            border-color: var(--accent);
+            transform: scale(1.03);
+        }
+
+        .country-node .power {
+            font-size: 0.8rem;
+            font-weight: normal;
+            margin-top: 5px;
+            color: var(--text-light);
+        }
+
+        .country-node .relation {
+            font-size: 0.75rem;
+            margin-top: 5px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        /* Actions styling */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            background: var(--secondary);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: var(--primary);
+        }
+
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        button.btn-accent {
+            background: var(--accent);
+        }
+        button.btn-accent:hover {
+            background: #c0392b;
+        }
+
+        /* Log styling */
+        .log-box {
+            height: 250px;
+            overflow-y: auto;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 4px;
+        }
+
+        .log-entry.success { color: #2ecc71; }
+        .log-entry.danger { color: #e74c3c; }
+        .log-entry.info { color: #3498db; }
+
+        /* Stats list */
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--bg);
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .relation-동맹 { background-color: #2ecc71; color: white; }
+        .relation-우호 { background-color: #a3e4d7; color: #117a65; }
+        .relation-중립 { background-color: #e5e7e9; color: #5d6d7e; }
+        .relation-경계 { background-color: #f9e79f; color: #b7950b; }
+        .relation-전쟁 { background-color: #f5b7b1; color: #78281f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>국제 외교관 시뮬레이터</h1>
+        <p>전략적 동맹, 기만, 그리고 평화 협상을 통해 세계에 영향력을 행사하세요.</p>
+    </header>
+
+    <div class="game-layout">
+        <!-- Left Column: Map & Actions -->
+        <div>
+            <div class="card">
+                <h2>세계 정세 <span id="turn-badge" class="status-badge">Turn 1</span></h2>
+                <div class="world-map" id="world-map">
+                    <!-- Dynamic Countries Grid -->
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-light);">* 국가를 선택하면 해당 국가에 대한 외교 조치를 취할 수 있습니다.</p>
+            </div>
+
+            <div class="card">
+                <h2>외교적 조치 (<span id="selected-country-name">선택 없음</span>)</h2>
+                <div class="actions-grid">
+                    <button id="btn-alliance" onclick="executeAction('alliance')" disabled>동맹 제안 (비용: 30)</button>
+                    <button id="btn-trade" onclick="executeAction('trade')" disabled>무역 협정 (비용: 15)</button>
+                    <button id="btn-pact" onclick="executeAction('pact')" disabled>상호불가침 조약 (비용: 20)</button>
+                    <button id="btn-spy" onclick="executeAction('spy')" disabled>공작원 파견 (비용: 25)</button>
+                    <button id="btn-denounce" class="btn-accent" onclick="executeAction('denounce')" disabled>공개 비난</button>
+                    <button id="btn-war" class="btn-accent" onclick="executeAction('war')" disabled>선전 포고</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>외교 보고서 (로그)</h2>
+                <div class="log-box" id="log-box">
+                    <div class="log-entry info">시뮬레이션이 시작되었습니다. 당신은 '한국'의 최고 외교관입니다.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Player Stats & Leaderboard -->
+        <div>
+            <div class="card">
+                <h2>나의 국가 (한국)</h2>
+                <div class="stat-item">
+                    <span>외교력 (Diplomacy)</span>
+                    <span id="stat-diplomacy" style="font-weight: bold; color: #2980b9;">100</span>
+                </div>
+                <div class="stat-item">
+                    <span>국가 국력 (Power)</span>
+                    <span id="stat-power" style="font-weight: bold;">150</span>
+                </div>
+                <div class="stat-item">
+                    <span>국제 신뢰도</span>
+                    <span id="stat-trust" style="font-weight: bold; color: #2ecc71;">70%</span>
+                </div>
+                <div class="stat-item" style="margin-top: 15px;">
+                    <button class="btn-accent" style="width: 100%;" onclick="nextTurn()">턴 종료 (외교력 충전)</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>세계 국력 순위</h2>
+                <div id="leaderboard">
+                    <!-- Dynamic Leaderboard -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Game State
+    let player = {
+        diplomacy: 100,
+        power: 150,
+        trust: 70
+    };
+
+    let turn = 1;
+    let selectedCountryIndex = null;
+
+    // AI Countries
+    let countries = [
+        { name: "미국", power: 300, relation: "우호", score: 65, status: "중립" },
+        { name: "중국", power: 280, relation: "경계", score: 35, status: "중립" },
+        { name: "일본", power: 140, relation: "중립", score: 50, status: "중립" },
+        { name: "러시아", power: 180, relation: "경계", score: 30, status: "중립" },
+        { name: "유럽연합", power: 220, relation: "우호", score: 70, status: "중립" },
+        { name: "영국", power: 130, relation: "우호", score: 60, status: "중립" }
+    ];
+
+    // Initialize Game
+    function initGame() {
+        renderMap();
+        renderLeaderboard();
+        updatePlayerStats();
+    }
+
+    function renderMap() {
+        const mapEl = document.getElementById('world-map');
+        mapEl.innerHTML = '';
+
+        countries.forEach((country, index) => {
+            const node = document.createElement('div');
+            node.className = `country-node ${selectedCountryIndex === index ? 'active' : ''}`;
+            node.onclick = () => selectCountry(index);
+
+            node.innerHTML = `
+                <div>${country.name}</div>
+                <div class="power">국력: ${country.power}</div>
+                <div class="relation relation-${country.relation}">${country.relation} (${country.score})</div>
+            `;
+            mapEl.appendChild(node);
+        });
+    }
+
+    function renderLeaderboard() {
+        const boardEl = document.getElementById('leaderboard');
+        boardEl.innerHTML = '';
+
+        // Copy and sort including player
+        let list = [...countries, { name: "한국 (플레이어)", power: player.power }].sort((a, b) => b.power - a.power);
+
+        list.forEach((c, idx) => {
+            const item = document.createElement('div');
+            item.className = 'stat-item';
+            if(c.name.includes("한국")) item.style.fontWeight = 'bold';
+            item.innerHTML = `<span>${idx + 1}. ${c.name}</span><span>${c.power}</span>`;
+            boardEl.appendChild(item);
+        });
+    }
+
+    function updatePlayerStats() {
+        document.getElementById('stat-diplomacy').innerText = player.diplomacy;
+        document.getElementById('stat-power').innerText = player.power;
+        document.getElementById('stat-trust').innerText = player.trust + "%";
+        document.getElementById('turn-badge').innerText = `Turn ${turn}`;
+    }
+
+    function selectCountry(index) {
+        selectedCountryIndex = index;
+        document.getElementById('selected-country-name').innerText = countries[index].name;
+        
+        // Enable buttons
+        document.getElementById('btn-alliance').disabled = false;
+        document.getElementById('btn-trade').disabled = false;
+        document.getElementById('btn-pact').disabled = false;
+        document.getElementById('btn-spy').disabled = false;
+        document.getElementById('btn-denounce').disabled = false;
+        document.getElementById('btn-war').disabled = false;
+
+        renderMap();
+    }
+
+    function log(message, type = 'info') {
+        const logBox = document.getElementById('log-box');
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.innerText = `[Turn ${turn}] ${message}`;
+        logBox.appendChild(entry);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function executeAction(actionType) {
+        if (selectedCountryIndex === null) return;
+        let country = countries[selectedCountryIndex];
+        
+        if (actionType === 'alliance') {
+            if (player.diplomacy < 30) { alert("외교력이 부족합니다!"); return; }
+            player.diplomacy -= 30;
+            if (country.score >= 60 && player.trust >= 50) {
+                country.relation = "동맹";
+                country.score = Math.min(100, country.score + 20);
+                player.power += 20; // Alliance boosts global standing
+                log(`${country.name}와 공식 동맹을 맺었습니다! 양국의 국정 협력이 강화됩니다.`, 'success');
+            } else {
+                country.score = Math.max(0, country.score - 10);
+                log(`${country.name}가 동맹 제안을 거절했습니다. 관계가 서먹해집니다.`, 'danger');
+            }
+        } 
+        else if (actionType === 'trade') {
+            if (player.diplomacy < 15) { alert("외교력이 부족합니다!"); return; }
+            player.diplomacy -= 15;
+            country.score = Math.min(100, country.score + 10);
+            player.power += 10;
+            country.power += 10;
+            if (country.relation === "중립") country.relation = "우호";
+            log(`${country.name}와 무역 협정을 체결했습니다. 상호 국력이 상승합니다.`, 'success');
+        }
+        else if (actionType === 'pact') {
+            if (player.diplomacy < 20) { alert("외교력이 부족합니다!"); return; }
+            player.diplomacy -= 20;
+            country.score = Math.min(100, country.score + 15);
+            log(`${country.name}와 상호불가침 조약을 맺었습니다. 안전 장치가 확보되었습니다.`, 'success');
+        }
+        else if (actionType === 'spy') {
+            if (player.diplomacy < 25) { alert("외교력이 부족합니다!"); return; }
+            player.diplomacy -= 25;
+            let success = Math.random() > 0.4;
+            if (success) {
+                country.power = Math.max(50, country.power - 20);
+                log(`${country.name}에 비밀 공작원을 파견하여 내부 기술을 탈취하고 기밀을 확보했습니다.`, 'success');
+            } else {
+                country.score = Math.max(0, country.score - 25);
+                country.relation = "경계";
+                player.trust = Math.max(0, player.trust - 15);
+                log(`${country.name}에서 스파이 행위가 발각되었습니다! 국제 신뢰도와 외교 관계가 급락합니다.`, 'danger');
+            }
+        }
+        else if (actionType === 'denounce') {
+            country.score = Math.max(0, country.score - 20);
+            country.relation = "경계";
+            // Other countries that dislike this country might like you more
+            countries.forEach((c, idx) => {
+                if(idx !== selectedCountryIndex && c.relation === "경계") c.score += 5;
+            });
+            log(`${country.name}의 독단적 행동을 국제 사회에 공개 비난했습니다.`, 'info');
+        }
+        else if (actionType === 'war') {
+            country.relation = "전쟁";
+            country.score = 0;
+            player.trust = Math.max(0, player.trust - 20);
+            log(`${country.name}에게 선전포고를 감행했습니다! 이제 전쟁 상태입니다.`, 'danger');
+        }
+
+        // Auto update UI
+        updatePlayerStats();
+        renderMap();
+        renderLeaderboard();
+    }
+
+    function nextTurn() {
+        turn++;
+        // Regenerate Diplomacy
+        player.diplomacy = Math.min(200, player.diplomacy + 40);
+        
+        // Simulating AI Behavior
+        countries.forEach(c => {
+            // Random fluctuations or war behavior
+            if (c.relation === "전쟁") {
+                // Battle
+                let playerRoll = player.power * (0.7 + Math.random() * 0.6);
+                let aiRoll = c.power * (0.7 + Math.random() * 0.6);
+                
+                if (playerRoll > aiRoll) {
+                    c.power = Math.max(30, c.power - 25);
+                    player.power += 15;
+                    log(`[전쟁 상태] ${c.name}과의 국경 교전에서 승리했습니다!`, 'success');
+                } else {
+                    player.power = Math.max(30, player.power - 20);
+                    log(`[전쟁 상태] ${c.name}과의 교전에서 밀려 피해를 입었습니다.`, 'danger');
+                }
+            } else {
+                // Natural growth or shift
+                c.power += Math.floor(Math.random() * 8) + 2;
+                // AI dynamic reaction
+                if (c.score > 75 && c.relation !== "동맹") c.relation = "우호";
+                if (c.score < 30 && c.relation !== "전쟁") c.relation = "경계";
+            }
+        });
+
+        log(`새로운 해가 밝았습니다. 국제 정세를 재정비하세요.`, 'info');
+        
+        // Update elements
+        updatePlayerStats();
+        renderMap();
+        renderLeaderboard();
+    }
+
+    // Run on startup
+    window.onload = initGame;
+</script>
+</body>
+</html>
